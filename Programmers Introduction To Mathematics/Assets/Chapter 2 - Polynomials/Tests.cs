@@ -9,7 +9,7 @@ public class Tests : MonoBehaviour
 {
 
     [SerializeField]
-    Graph graph;
+    Plot plot;
 
     [SerializeField]
     Transform[] targets;
@@ -73,8 +73,8 @@ public class Tests : MonoBehaviour
             //Last step for this target, set the equation after scaling to the random color and hide the lerping display equation
             System.Action step3 = () =>
             {
-                graph.SetColor(equationAfterScalingID, color);
-                graph.ShowEquation(displayEquationID, false);
+                plot.SetColor(equationAfterScalingID, color);
+                plot.ShowEquation(displayEquationID, false);
 
                 displayActions[nextStep1ID]();
             };
@@ -84,10 +84,10 @@ public class Tests : MonoBehaviour
             //Second step for this target, set the equation after scaling to be visible and lerp towards it from the equation from roots
             System.Action step2 = () =>
             {
-                graph.ShowEquation(equationFromRootsID, false);
+                plot.ShowEquation(equationFromRootsID, false);
 
-                graph.SetColor(equationAfterScalingID, new UnityEngine.Color(0, 0, 0, 0.2f));
-                graph.ShowEquation(equationAfterScalingID, true);
+                plot.SetColor(equationAfterScalingID, new UnityEngine.Color(0, 0, 0, 0.2f));
+                plot.ShowEquation(equationAfterScalingID, true);
 
                 StartCoroutine(LerpPolynomial(equationFromRoots, equationAfterScaling, displayEquation, 3, displayActions[step3ID]));
             };
@@ -98,11 +98,11 @@ public class Tests : MonoBehaviour
             //First step for this target, show the equation from roots and lerp towards it from zero
             System.Action step1 = () =>
             {
-                graph.SetColor(equationFromRootsID, new UnityEngine.Color(0, 0, 0, 0.2f));
-                graph.ShowEquation(equationFromRootsID, true);
+                plot.SetColor(equationFromRootsID, new UnityEngine.Color(0, 0, 0, 0.2f));
+                plot.ShowEquation(equationFromRootsID, true);
 
-                graph.SetColor(displayEquationID, color);
-                graph.ShowEquation(displayEquationID, true);
+                plot.SetColor(displayEquationID, color);
+                plot.ShowEquation(displayEquationID, true);
 
                 StartCoroutine(LerpPolynomial(baseEquation, equationFromRoots, displayEquation, 3, displayActions[step2ID]));
             };
@@ -116,7 +116,7 @@ public class Tests : MonoBehaviour
             }
         }
 
-        graph.ShowEquation(equationIDs[equationIDs.Length - 1], false);
+        plot.ShowEquation(equationIDs[equationIDs.Length - 1], false);
 
         firstStep();
     }
@@ -125,7 +125,7 @@ public class Tests : MonoBehaviour
     {
         if(equationIDs != null)
         {
-            graph.RemoveEquations(equationIDs);
+            plot.RemoveEquations(equationIDs);
         }
 
         equations = new EquationWrapper[targets.Length * 3 + 2];
@@ -176,7 +176,7 @@ public class Tests : MonoBehaviour
             ew2.equation = equationFromRoots;
 
             equations[currentEquationIndex] = ew2;
-            equationIDs[currentEquationIndex] = graph.AddEquation(ew2, false);
+            equationIDs[currentEquationIndex] = plot.AddEquation(ew2, false);
 
 
             //second equation is the first one, scaled so that the result at x = currentTarget.x is equal to currentTarget.y
@@ -192,7 +192,7 @@ public class Tests : MonoBehaviour
             ew3.equation = equationAfterScaling;
 
             equations[currentEquationIndex + 1] = ew3;
-            equationIDs[currentEquationIndex + 1] = graph.AddEquation(ew3, false);
+            equationIDs[currentEquationIndex + 1] = plot.AddEquation(ew3, false);
 
             solution += equationAfterScaling;
 
@@ -203,10 +203,10 @@ public class Tests : MonoBehaviour
             ew4.equation = displayEquation;
 
             equations[currentEquationIndex + 2] = ew4;
-            equationIDs[currentEquationIndex + 2] = graph.AddEquation(ew4, false);
+            equationIDs[currentEquationIndex + 2] = plot.AddEquation(ew4, false);
         }
 
-        equationIDs[equationIDs.Length - 1] = graph.AddEquation(ew);
+        equationIDs[equationIDs.Length - 1] = plot.AddEquation(ew);
     }
 
     void UpdateGraph()
@@ -308,9 +308,9 @@ public class Tests : MonoBehaviour
         Polynomial b = a / divisor;
         Polynomial c = b * targetPositions[selectedTarget].y;
 
-        graph.AddEquation(a, color);
-        graph.AddEquation(b, color);
-        graph.AddEquation(c, color);
+        plot.AddEquation(a, color);
+        plot.AddEquation(b, color);
+        plot.AddEquation(c, color);
 
         return c;
     }

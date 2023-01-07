@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Graph : MonoBehaviour
+public class Plot : MonoBehaviour
 {
     private int currentID = 0;
 
@@ -23,20 +23,20 @@ public class Graph : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        
+
     }
 
     // Update is called once per frame
     void Update()
     {
-        
+
     }
 
     public void ShowEquation(int equationID, bool show)
     {
         Line line;
 
-        if(Lines.TryGetValue(equationID, out line))
+        if (Lines.TryGetValue(equationID, out line))
         {
             line.Show(show);
         }
@@ -61,7 +61,7 @@ public class Graph : MonoBehaviour
     {
         int[] ids = new int[equations.Length];
 
-        for(int i = 0; i < equations.Length; i++)
+        for (int i = 0; i < equations.Length; i++)
         {
             ids[i] = AddEquation(equations[i], show);
         }
@@ -71,7 +71,7 @@ public class Graph : MonoBehaviour
 
     public void RemoveEquations(int[] equationIDs)
     {
-        foreach(int id in equationIDs)
+        foreach (int id in equationIDs)
         {
             RemoveEquation(id);
         }
@@ -88,7 +88,7 @@ public class Graph : MonoBehaviour
     public void SetColor(int equationID, Color color)
     {
         Line line;
-        if(Lines.TryGetValue(equationID, out line))
+        if (Lines.TryGetValue(equationID, out line))
         {
             line.SetColor(color);
         }
@@ -97,7 +97,7 @@ public class Graph : MonoBehaviour
     public void RemoveEquation(int equationID)
     {
         Line line;
-        if(Lines.TryGetValue(equationID, out line))
+        if (Lines.TryGetValue(equationID, out line))
         {
             Lines.Remove(equationID);
             Destroy(line);
