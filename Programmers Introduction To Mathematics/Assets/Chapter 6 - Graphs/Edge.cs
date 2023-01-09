@@ -35,6 +35,11 @@ public class Edge : IEquatable<Edge>
         return ((this.from == other.from) && (this.to == other.to)) || ((this.from == other.to) && (this.to == other.from));
     }
 
+    public override bool Equals(object obj)
+    {
+        return Equals(obj as Edge);
+    }
+
     public Edge(Vertex _from, Vertex _to)
     {
         this.from = _from;

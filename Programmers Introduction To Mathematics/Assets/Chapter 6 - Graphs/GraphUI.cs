@@ -5,7 +5,7 @@ using UnityEngine;
 public class GraphUI : MonoBehaviour
 {
     [SerializeField]
-    RectTransform Vertices, Edges;
+    RectTransform VertexParent, EdgeParent;
 
     [SerializeField]
     VertexUI vertexUIPrefab;
@@ -13,18 +13,24 @@ public class GraphUI : MonoBehaviour
     [SerializeField]
     EdgeUI edgeUIPrefab;
 
+    public Dictionary<Edge, EdgeUI> Edges = new Dictionary<Edge, EdgeUI>();
+
 
     public void DrawGraph(Graph graph)
     {
-        foreach(Vertex v in graph.Vertices)
-        {
-            VertexUI vertexUI = Instantiate<VertexUI>(vertexUIPrefab, Vertices, false);
-        }
-
         foreach(Edge e in graph.Edges)
         {
-            EdgeUI edgeUI = Instantiate<EdgeUI>(edgeUIPrefab, Edges, false);
+            EdgeUI edgeUI = Instantiate<EdgeUI>(edgeUIPrefab, EdgeParent, false);
+            edgeUI.Init(e.from.Position, e.to.Position, 20);
+            Edges.Add(e, edgeUI);
         }
+
+        foreach(Vertex v in graph.Vertices)
+        {
+            VertexUI vertexUI = Instantiate<VertexUI>(vertexUIPrefab, VertexParent, false);
+            vertexUI.Init(v, this);
+        }
+
     }
 
     // Start is called before the first frame update

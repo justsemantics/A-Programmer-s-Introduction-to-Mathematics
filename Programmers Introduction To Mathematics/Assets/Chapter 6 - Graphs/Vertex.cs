@@ -6,7 +6,7 @@ public class Vertex
 {
 
     static int VertexCount = 0;
-    public List<Edge> Edges;
+    public List<Edge> Edges = new List<Edge>();
     public Color Color = Color.white;
     public Vertex Previous;
     public Vertex Next;
@@ -35,6 +35,7 @@ public class Vertex
         Previous.Next = this;
         Position = Previous.Position;
         Name = Previous.Name;
+        Color = Previous.Color;
     }
 
     public List<Vertex> Neighbors()

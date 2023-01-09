@@ -4,9 +4,8 @@ using UnityEngine;
 using System.Linq;
 using Unity.VisualScripting;
 using System;
-using System.Net.Mail;
 
-public class Graph : MonoBehaviour
+public class Graph
 {
     public List<Edge> Edges = new List<Edge>();
     public List<Vertex> Vertices = new List<Vertex>();
@@ -20,11 +19,6 @@ public class Graph : MonoBehaviour
         Color.magenta
     };
 
-    // Start is called before the first frame update
-    void Start()
-    {
-
-    }
 
     public void AddEdge(Edge e)
     {
@@ -66,7 +60,7 @@ public class Graph : MonoBehaviour
 
     public void RemoveVertex(Vertex v)
     {
-        if (!Vertices.Contains(v))
+        if (Vertices.Contains(v))
         {
             Vertices.Remove(v);
             v.Edges.ForEach(edge => Edges.Remove(edge));
@@ -85,27 +79,24 @@ public class Graph : MonoBehaviour
         return Edges.Contains(connectingEdge);
     }
 
-    // Update is called once per frame
-    void Update()
+    public Graph PlanarFiveColor()
     {
-        
-    }
-
-    public static void PlanarFiveColor(Graph graph)
-    {
-        if (graph.Vertices.Count <= 5)
+        if (Vertices.Count <= 5)
         {
             int currentColor = 0;
-            foreach(Vertex v in graph.Vertices)
+            foreach(Vertex v in Vertices)
             {
-                v.Color = graph.colors[currentColor];
+                v.Color = colors[currentColor];
                 currentColor++;
             }
 
-            return;
+            Debug.Log("wowoowwo");
+            return Copy();
+
         }
 
-        Graph reducedGraph = graph.Copy();
+        Graph reducedGraph = Copy();
+        Graph coloredGraph;
 
         Vertex selectedVertex;
 
@@ -117,6 +108,44 @@ public class Graph : MonoBehaviour
             selectedVertex = degAtMost4[0];
 
             reducedGraph.RemoveVertex(selectedVertex);
+
+            coloredGraph = reducedGraph.PlanarFiveColor();
+
+            List<Vertex> neighbors = new List<Vertex>();
+
+            foreach(Vertex oldNeighbor in selectedVertex.Neighbors())
+            {
+                foreach(Vertex newNeighbor in coloredGraph.Vertices)
+                {
+                    if(oldNeighbor.Name == newNeighbor.Name)
+                    {
+                        neighbors.Add(newNeighbor);
+                    }
+                }
+            }
+
+            List<Color> availableColors = colors.ToList();
+
+            foreach(Vertex neighbor in neighbors)
+            {
+                if (availableColors.Contains(neighbor.Color))
+                {
+                    availableColors.Remove(neighbor.Color);
+                }
+            }
+
+            selectedVertex.Color = availableColors.First();
+
+            coloredGraph.AddVertex(selectedVertex);
+
+            selectedVertex.Edges.Clear();
+
+            foreach(Vertex neighbor in neighbors)
+            {
+                coloredGraph.AddEdge(new Edge(selectedVertex, neighbor));
+            }
+
+            return coloredGraph;
         }
         else
         {
@@ -131,6 +160,102 @@ public class Graph : MonoBehaviour
             reducedGraph.FindTwoNonAdjacent(neighbors, out w1, out w2);
 
             Vertex mergedVertex = reducedGraph.Merge(w1, w2);
+
+
+            coloredGraph = reducedGraph.PlanarFiveColor();
+
+
+            Vertex newMergedVertex = mergedVertex;
+            Color mergedColor = Color.black;
+            foreach(Vertex v in coloredGraph.Vertices)
+            {
+                if(v.Name == mergedVertex.Name)
+                {
+                    newMergedVertex = v;
+                    mergedColor = v.Color;
+                    break;
+                }
+            }
+
+            w1.Color = mergedColor;
+            List<Vertex> w1Neighbors = new List<Vertex>();
+            foreach (Vertex oldNeighbor in w1.Neighbors())
+            {
+                foreach (Vertex newNeighbor in coloredGraph.Vertices)
+                {
+                    if (oldNeighbor.Name == newNeighbor.Name)
+                    {
+                        w1Neighbors.Add(newNeighbor);
+                    }
+                }
+            }
+
+            w2.Color = mergedColor;
+            List<Vertex> w2Neighbors = new List<Vertex>();
+            foreach (Vertex oldNeighbor in w1.Neighbors())
+            {
+                foreach (Vertex newNeighbor in coloredGraph.Vertices)
+                {
+                    if (oldNeighbor.Name == newNeighbor.Name)
+                    {
+                        w2Neighbors.Add(newNeighbor);
+                    }
+                }
+            }
+
+            coloredGraph.RemoveVertex(newMergedVertex);
+
+            coloredGraph.AddVertex(w1);
+            coloredGraph.AddVertex(w2);
+
+            w1.Edges.Clear();
+            w2.Edges.Clear();
+
+            foreach (Vertex neighbor in w1Neighbors)
+            {
+                coloredGraph.AddEdge(new Edge(w1, neighbor));
+            }
+
+            foreach (Vertex neighbor in w2Neighbors)
+            {
+                coloredGraph.AddEdge(new Edge(w2, neighbor));
+            }
+
+            neighbors = new List<Vertex>();
+
+            foreach (Vertex oldNeighbor in selectedVertex.Neighbors())
+            {
+                foreach (Vertex newNeighbor in coloredGraph.Vertices)
+                {
+                    if (oldNeighbor.Name == newNeighbor.Name)
+                    {
+                        neighbors.Add(newNeighbor);
+                    }
+                }
+            }
+
+            List<Color> availableColors = colors.ToList();
+
+            foreach (Vertex neighbor in neighbors)
+            {
+                if (availableColors.Contains(neighbor.Color))
+                {
+                    availableColors.Remove(neighbor.Color);
+                }
+            }
+
+            selectedVertex.Color = availableColors.First();
+
+
+            coloredGraph.AddVertex(selectedVertex);
+
+            selectedVertex.Edges.Clear();
+            foreach (Vertex neighbor in neighbors)
+            {
+                coloredGraph.AddEdge(new Edge(selectedVertex, neighbor));
+            }
+
+            return coloredGraph;
 
         }
     }
@@ -147,6 +272,7 @@ public class Graph : MonoBehaviour
                 {
                     w1 = a;
                     w2 = b;
+                    return;
                 }
             }
         }
@@ -160,6 +286,9 @@ public class Graph : MonoBehaviour
         RemoveVertex(w2);
 
         Vertex v = new Vertex();
+        AddVertex(v);
+
+        v.Position = w1.Position + (w2.Position - w1.Position) / 2;
 
         foreach(Vertex neighbor in w1.Neighbors()){
             AddEdge(new Edge(v, neighbor));
