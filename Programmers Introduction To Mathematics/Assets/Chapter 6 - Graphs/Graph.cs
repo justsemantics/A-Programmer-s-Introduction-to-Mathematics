@@ -65,10 +65,10 @@ public class Graph
             Vertices.Remove(v);
             v.Edges.ForEach(edge => Edges.Remove(edge));
 
-            v.Neighbors().ForEach(neighbor =>
+            foreach(Vertex neighbor in v.Neighbors())
             {
-                neighbor.Edges.Remove(new Edge(neighbor, v));
-            });
+                neighbor.Edges.Remove(new Edge(v, neighbor));
+            }
         } 
     }
 
@@ -90,7 +90,6 @@ public class Graph
                 currentColor++;
             }
 
-            Debug.Log("wowoowwo");
             return Copy();
 
         }
@@ -136,9 +135,9 @@ public class Graph
 
             selectedVertex.Color = availableColors.First();
 
+            selectedVertex.Edges.Clear();
             coloredGraph.AddVertex(selectedVertex);
 
-            selectedVertex.Edges.Clear();
 
             foreach(Vertex neighbor in neighbors)
             {
@@ -159,6 +158,9 @@ public class Graph
 
             reducedGraph.FindTwoNonAdjacent(neighbors, out w1, out w2);
 
+            List<Vertex> w1Neighbors = w1.Neighbors();
+            List<Vertex> w2Neighbors = w2.Neighbors();
+
             Vertex mergedVertex = reducedGraph.Merge(w1, w2);
 
 
@@ -178,27 +180,27 @@ public class Graph
             }
 
             w1.Color = mergedColor;
-            List<Vertex> w1Neighbors = new List<Vertex>();
-            foreach (Vertex oldNeighbor in w1.Neighbors())
+            List<Vertex> w1NewNeighbors = new List<Vertex>();
+            foreach (Vertex oldNeighbor in w1Neighbors)
             {
                 foreach (Vertex newNeighbor in coloredGraph.Vertices)
                 {
                     if (oldNeighbor.Name == newNeighbor.Name)
                     {
-                        w1Neighbors.Add(newNeighbor);
+                        w1NewNeighbors.Add(newNeighbor);
                     }
                 }
             }
 
             w2.Color = mergedColor;
-            List<Vertex> w2Neighbors = new List<Vertex>();
-            foreach (Vertex oldNeighbor in w1.Neighbors())
+            List<Vertex> w2NewNeighbors = new List<Vertex>();
+            foreach (Vertex oldNeighbor in w2Neighbors)
             {
                 foreach (Vertex newNeighbor in coloredGraph.Vertices)
                 {
                     if (oldNeighbor.Name == newNeighbor.Name)
                     {
-                        w2Neighbors.Add(newNeighbor);
+                        w2NewNeighbors.Add(newNeighbor);
                     }
                 }
             }
@@ -211,32 +213,31 @@ public class Graph
             w1.Edges.Clear();
             w2.Edges.Clear();
 
-            foreach (Vertex neighbor in w1Neighbors)
+            foreach (Vertex neighbor in w1NewNeighbors)
             {
                 coloredGraph.AddEdge(new Edge(w1, neighbor));
             }
 
-            foreach (Vertex neighbor in w2Neighbors)
+            foreach (Vertex neighbor in w2NewNeighbors)
             {
                 coloredGraph.AddEdge(new Edge(w2, neighbor));
             }
 
-            neighbors = new List<Vertex>();
-
-            foreach (Vertex oldNeighbor in selectedVertex.Neighbors())
+            List<Vertex> newNeighbors = new List<Vertex>();
+            foreach (Vertex oldNeighbor in neighbors)
             {
                 foreach (Vertex newNeighbor in coloredGraph.Vertices)
                 {
                     if (oldNeighbor.Name == newNeighbor.Name)
                     {
-                        neighbors.Add(newNeighbor);
+                        newNeighbors.Add(newNeighbor);
                     }
                 }
             }
 
             List<Color> availableColors = colors.ToList();
 
-            foreach (Vertex neighbor in neighbors)
+            foreach (Vertex neighbor in newNeighbors)
             {
                 if (availableColors.Contains(neighbor.Color))
                 {
@@ -250,7 +251,7 @@ public class Graph
             coloredGraph.AddVertex(selectedVertex);
 
             selectedVertex.Edges.Clear();
-            foreach (Vertex neighbor in neighbors)
+            foreach (Vertex neighbor in newNeighbors)
             {
                 coloredGraph.AddEdge(new Edge(selectedVertex, neighbor));
             }

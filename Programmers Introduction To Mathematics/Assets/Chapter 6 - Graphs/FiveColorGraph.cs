@@ -38,7 +38,6 @@ public class FiveColorGraph : MonoBehaviour
 
         Graph currentGraph = startingGraph;
         currentGraph = currentGraph.PlanarFiveColor();
-        Debug.Log("wow");
 
         GraphUI graphUI = Instantiate(graphUIPrefab);
         graphUI.DrawGraph(currentGraph);
