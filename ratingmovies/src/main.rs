@@ -1,12 +1,15 @@
 
+use std::{array, convert};
+use std::cmp::min_by;
+use std::env::consts::EXE_SUFFIX;
 use std::fs::File;
 use std::io::Read;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::map::Values;
 use serde_json::{json, to_string, Map, Value};
 
-use ndarray::{arr1, Array1, Array2, ArrayBase};
+use ndarray::{arr1, Array1, Array2, ArrayBase, Axis, Dimension, ShapeArg, ShapeBuilder};
 
 use rand::Rng;
 
@@ -17,6 +20,44 @@ struct Story{
     words: Vec<String>,
     text: String
 }
+
+#[derive(Debug)]
+struct SVD_Entry{
+    singular_value: f32,
+    u: Array2<f32>,
+    v: Array2<f32>
+}
+
+#[derive(Serialize, Deserialize)]
+struct NDArray_Serializable
+{
+    data:Vec<Vec<f32>>,
+    num_rows: i32,
+    num_cols: i32
+}
+
+fn create_serializable_array(A:Array2<f32>) -> NDArray_Serializable
+{
+    let mut data: Vec<Vec<f32>> = vec![];
+
+    for row in A.rows().into_iter()
+    {
+        let mut row_data = vec![];
+        for entry in row.iter()
+        {
+            row_data.push(entry.clone());
+        }
+
+        data.push(row_data);
+    }
+
+
+    let num_rows = A.len_of(Axis(0)).try_into().unwrap();
+    let num_cols = A.len_of(Axis(1)).try_into().unwrap();
+
+    return NDArray_Serializable{data, num_rows, num_cols};
+}
+
 
 fn normalize(vector:&Array2<f32>) -> Array2<f32>
 {
@@ -33,13 +74,16 @@ fn norm(vector:&Array2<f32>) -> f32
 
 fn multiply_vector_until_convergence(vector: &mut Array2<f32>, array:&Array2<f32>, epsilon:f32) -> bool
 {
+    let old_vector = vector.clone();
     let mut new_vector = array.dot(vector);
     new_vector = normalize(&new_vector);
     
-
+    let proj = norm(&new_vector.clone().reversed_axes().dot(&old_vector));
+    println!("{0}", proj);
+    let has_not_converged:bool = proj < (1.0 - epsilon);
     *vector = new_vector;
 
-    return false;
+    return has_not_converged;
 }
 
 fn random_unit_vector(size:usize) -> Array2<f32>
@@ -53,6 +97,54 @@ fn random_unit_vector(size:usize) -> Array2<f32>
     vector = vector / norm;
 
     return vector;
+}
+
+fn oneD_SVD(A: &Array2<f32>, epsilon:f32) -> Array2<f32>
+{  
+    //matrix A has m rows and n columns
+    let m = A.len_of(Axis(0));
+    let n = A.len_of(Axis(1));
+    //we're going to do a dot product of A and A transpose
+    //in whichever order gives us a smaller resulting matrix
+    //which will be a square with both min_size rows and columns
+    let min_size = core::cmp::min(m, n);
+
+    let A_T = A.clone().reversed_axes();
+    let B:Array2<f32>;
+
+    if m > n
+    {
+        B = A_T.dot(A);
+    }
+    else
+    {
+        B = A.dot(&A_T);
+    }
+
+    let mut v = random_unit_vector(min_size);
+    while multiply_vector_until_convergence(&mut v, &B, epsilon)
+    {
+        println!("{:?}", v.to_string());
+    }
+
+    return v;
+}
+
+fn exclude_span_of_vector(A:&mut Array2<f32>, u:&Array2<f32>, v:&Array2<f32>)
+{
+    let size = A.dim().0;
+    for i in 0..size
+    {
+        for j in 0..size
+        {
+            A[(i, j)] -= u[(0, i)] * v[(0, j)];
+        }
+    }
+}
+
+fn write_word_counts_file(A: &Array2<f32>)
+{
+
 }
 
 fn main() {
@@ -83,15 +175,34 @@ fn main() {
         }
     }
 
-    let word_copy = word_counts.clone();
-    word_counts = word_counts.reversed_axes().dot(&word_copy);
 
     //using power method for finding largest eigenvector / eigenvalue
-    let mut first_vector = random_unit_vector(stories.len());
+    
+    let mut svd_so_far:Vec<SVD_Entry> = vec![];
+    let epsilon:f32 = (10.0_f32).powi(-3);
 
-    let EPS:f32 = (10.0_f32).powi(-6);
-    while multiply_vector_until_convergence(&mut first_vector, &word_counts, EPS)
+
+    for iteration in 0..10
     {
-        println!("{:?}", first_vector.to_string());
+        println!("ITERATION {0}", iteration);
+
+        let mut A = word_counts.clone();
+        
+        //exclude span of already found vectors
+        for svd_entry in &svd_so_far{
+            exclude_span_of_vector(&mut A, &svd_entry.u, &svd_entry.v);
+        }
+
+        //find next singular vector
+        let v = oneD_SVD(&A, epsilon);
+        let mut u:Array2<f32> = word_counts.dot(&v);
+        let sigma = norm(&u);
+        u = u / sigma;
+    
+        let new_svd_entry = SVD_Entry{singular_value: sigma, u: u, v: v};
+
+        println!("{0}", new_svd_entry.singular_value);
+        svd_so_far.push(new_svd_entry);
     }
+
 }
