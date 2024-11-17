@@ -3,7 +3,7 @@ use std::{array, convert, num};
 use std::cmp::min_by;
 use std::env::consts::EXE_SUFFIX;
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Read, Write};
 
 use serde::{Deserialize, Serialize};
 use serde_json::map::Values;
@@ -41,15 +41,18 @@ impl NDArray_Serializable
     fn from_array2(A:&Array2<f32>) -> NDArray_Serializable
     {
         let mut data: Vec<f32> = vec![];
-
+        let mut num_entries = 0;
+        let mut total_word_count = 0.0;
         for row in A.rows().into_iter()
         {
             for entry in row.iter()
             {
-                data.push(entry.clone());
+                total_word_count += entry;
+                num_entries += 1;
+                data.push(*entry);
             }
         }
-    
+        println!("{0} entries, {1} words total", num_entries, total_word_count);
         let num_rows = A.len_of(Axis(0)) as i32;
         let num_cols = A.len_of(Axis(1)) as i32;
 
@@ -58,6 +61,12 @@ impl NDArray_Serializable
 
     fn to_array2(&self) -> Array2<f32>
     {
+        println!(
+            "creating Array2<f32> with {0} rows and {1} columns",
+            self.num_rows,
+            self.num_cols
+        );
+
         let shape = (self.num_rows as usize, self.num_cols as usize);
         
         let A = Array2::from_shape_vec(shape, self.data.clone()).unwrap();
@@ -65,7 +74,23 @@ impl NDArray_Serializable
         return A;
     }
 
+    fn write_to_file(&self, filename: &str)
+    {
+        let file = File::create(filename).unwrap();
+        let mut writer = std::io::BufWriter::new(file);
+        serde_json::to_writer(writer, self).unwrap();
+    }
+
+    fn read_from_file(filename:&str) -> Array2<f32>
+    {
+        let file = File::open(filename).unwrap();
+        let mut reader:BufReader<File> = std::io::BufReader::new(file);
+        let deserialized_data:NDArray_Serializable = serde_json::from_reader(reader).unwrap();
+        return deserialized_data.to_array2();
+    }
+
 }
+
 
 
 fn normalize(vector:&Array2<f32>) -> Array2<f32>
@@ -141,22 +166,20 @@ fn oneD_SVD(A: &Array2<f32>, epsilon:f32) -> Array2<f32>
 
 fn exclude_span_of_vector(A:&mut Array2<f32>, u:&Array2<f32>, v:&Array2<f32>)
 {
-    let size = A.dim().0;
+    let size = A.len_of(Axis(0));
     for i in 0..size
     {
         for j in 0..size
         {
-            A[(i, j)] -= u[(0, i)] * v[(0, j)];
+            A[(i, j)] -= u[(i, 0)] * v[(j, 0)];
         }
     }
 }
 
-fn write_word_counts_file(A: &Array2<f32>)
-{
-
-}
-
 fn main() {
+    //basically safe to leave this unless we get a different database of stories
+    let SHOULD_IMPORT = true;
+
     //read stories from json
     let mut story_file = File::open("all_stories.json").unwrap();
     let mut story_file_contents = String::new();
@@ -170,22 +193,32 @@ fn main() {
     let most_common_words: Vec<String> = words_file_contents.lines()
         .map(|word| word.to_string()).collect();
 
-    //word_counts has a row for each story, and a column for each word
+    //word_counts has a row for each word, and a column for each story
     //each entry represents the number of times that column's word appears in that row's story
-    let mut word_counts = Array2::<f32>::zeros((most_common_words.len(), stories.len()));
-    for (current_col, story) in stories.iter().enumerate(){
-        for story_word in &story.words{
-            for (current_row, word) in most_common_words.iter().enumerate(){
-                if story_word == word {
-                    word_counts[(current_row, current_col)] += 1.0;
-                    break;
+    //doing the counting every time takes a while and makes debugging boring
+    //so as long as all_stories.json hasn't been changed, we can just read in the data
+    let mut word_counts:Array2<f32>;
+    if SHOULD_IMPORT {
+        word_counts = NDArray_Serializable::read_from_file("word_counts.json");
+    }
+    else{
+        word_counts = Array2::<f32>::zeros((most_common_words.len(), stories.len()));
+        for (current_col, story) in stories.iter().enumerate(){
+            for story_word in &story.words{
+                for (current_row, word) in most_common_words.iter().enumerate(){
+                    if story_word == word {
+                        word_counts[(current_row, current_col)] += 1.0;
+                        break;
+                    }
                 }
             }
         }
+
+        //write word_counts.json so we don't have to do that ugly nested loop again
+        let serializable_data = NDArray_Serializable::from_array2(&word_counts);
+        serializable_data.write_to_file("word_counts.json");
     }
 
-    let test = NDArray_Serializable::from_array2(&word_counts);
-    println!("{0}x{1} array", test.num_rows, test.num_cols);
 
     //using power method for finding largest eigenvector / eigenvalue
     
