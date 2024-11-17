@@ -1,5 +1,5 @@
 
-use std::{array, convert};
+use std::{array, convert, num};
 use std::cmp::min_by;
 use std::env::consts::EXE_SUFFIX;
 use std::fs::File;
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::map::Values;
 use serde_json::{json, to_string, Map, Value};
 
-use ndarray::{arr1, Array1, Array2, ArrayBase, Axis, Dimension, ShapeArg, ShapeBuilder};
+use ndarray::{arr1, Array1, Array2, ArrayBase, Axis, Dim, Dimension, Shape, ShapeArg, ShapeBuilder};
 
 use rand::Rng;
 
@@ -31,31 +31,40 @@ struct SVD_Entry{
 #[derive(Serialize, Deserialize)]
 struct NDArray_Serializable
 {
-    data:Vec<Vec<f32>>,
+    data:Vec<f32>,
     num_rows: i32,
-    num_cols: i32
+    num_cols: i32,
 }
 
-fn create_serializable_array(A:Array2<f32>) -> NDArray_Serializable
+impl NDArray_Serializable
 {
-    let mut data: Vec<Vec<f32>> = vec![];
-
-    for row in A.rows().into_iter()
+    fn from_array2(A:&Array2<f32>) -> NDArray_Serializable
     {
-        let mut row_data = vec![];
-        for entry in row.iter()
-        {
-            row_data.push(entry.clone());
-        }
+        let mut data: Vec<f32> = vec![];
 
-        data.push(row_data);
+        for row in A.rows().into_iter()
+        {
+            for entry in row.iter()
+            {
+                data.push(entry.clone());
+            }
+        }
+    
+        let num_rows = A.len_of(Axis(0)) as i32;
+        let num_cols = A.len_of(Axis(1)) as i32;
+
+        return NDArray_Serializable{data, num_rows, num_cols};
     }
 
+    fn to_array2(&self) -> Array2<f32>
+    {
+        let shape = (self.num_rows as usize, self.num_cols as usize);
+        
+        let A = Array2::from_shape_vec(shape, self.data.clone()).unwrap();
 
-    let num_rows = A.len_of(Axis(0)).try_into().unwrap();
-    let num_cols = A.len_of(Axis(1)).try_into().unwrap();
+        return A;
+    }
 
-    return NDArray_Serializable{data, num_rows, num_cols};
 }
 
 
@@ -175,6 +184,8 @@ fn main() {
         }
     }
 
+    let test = NDArray_Serializable::from_array2(&word_counts);
+    println!("{0}x{1} array", test.num_rows, test.num_cols);
 
     //using power method for finding largest eigenvector / eigenvalue
     
