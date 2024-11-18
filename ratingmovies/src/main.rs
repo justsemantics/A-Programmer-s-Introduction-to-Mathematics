@@ -1,10 +1,12 @@
 
-use std::{array, convert, num};
+use core::hash;
+use std::{array, convert, num, path, path::Path};
 use std::cmp::min_by;
 use std::env::consts::EXE_SUFFIX;
 use std::fs::File;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 
+use pruefung::crc::Crc32;
 use serde::{Deserialize, Serialize};
 use serde_json::map::Values;
 use serde_json::{json, to_string, Map, Value};
@@ -12,6 +14,8 @@ use serde_json::{json, to_string, Map, Value};
 use ndarray::{arr1, Array1, Array2, ArrayBase, Axis, Dim, Dimension, Shape, ShapeArg, ShapeBuilder};
 
 use rand::Rng;
+
+use pruefung::{crc, Digest, Hasher};
 
 #[derive(Deserialize)]
 #[derive(Debug)]
@@ -22,10 +26,74 @@ struct Story{
 }
 
 #[derive(Debug)]
-struct SVD_Entry{
+struct SVD_Entry
+{
     singular_value: f32,
     u: Array2<f32>,
     v: Array2<f32>
+}
+
+#[derive(Serialize, Deserialize)]
+struct Word_Count_Metadata
+{
+    hash:u64,
+    rows:usize,
+    cols:usize
+}
+
+impl Word_Count_Metadata
+{
+    fn compute_hash(filename:&str) -> u64
+    {
+        let mut hasher = Crc32::new();
+        let file = File::open(filename).unwrap();
+        let mut reader: BufReader<File> = std::io::BufReader::new(file);
+        let mut bytes = vec![];
+
+        let file_read = reader.read_to_end(&mut bytes);
+
+        hasher.write(&bytes);
+
+        return hasher.finish();
+    }
+
+    fn from_file(filename:&str) -> Word_Count_Metadata
+    {
+        let file= File::open(filename);
+        let hash = Word_Count_Metadata::compute_hash(filename);
+        let metadata = Word_Count_Metadata{hash: hash, rows: 0, cols: 0};
+
+        return metadata;
+    }
+
+    fn matches_file(&self, filename:&str) -> Result<(), u64>
+    {
+        let hash = Word_Count_Metadata::compute_hash(filename);
+
+        if self.hash == hash
+        {
+            return Result::Ok(());
+        }
+        else
+        {
+            return Result::Err(hash);
+        }
+    }
+
+    fn read_from_file(filename:&str) -> Word_Count_Metadata
+    {
+        let file = File::open(filename).unwrap();
+        let reader:BufReader<File> = std::io::BufReader::new(file);
+        let deserialized_data:Word_Count_Metadata = serde_json::from_reader(reader).unwrap();
+        return deserialized_data;
+    }
+
+    fn write_to_file(&self, filename:&str)
+    {
+        let file = File::create(filename).unwrap();
+        let writer = std::io::BufWriter::new(file);
+        serde_json::to_writer(writer, self).unwrap();
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -33,7 +101,7 @@ struct NDArray_Serializable
 {
     data:Vec<f32>,
     num_rows: i32,
-    num_cols: i32,
+    num_cols: i32
 }
 
 impl NDArray_Serializable
@@ -77,14 +145,14 @@ impl NDArray_Serializable
     fn write_to_file(&self, filename: &str)
     {
         let file = File::create(filename).unwrap();
-        let mut writer = std::io::BufWriter::new(file);
+        let writer: BufWriter<File> = std::io::BufWriter::new(file);
         serde_json::to_writer(writer, self).unwrap();
     }
 
     fn read_from_file(filename:&str) -> Array2<f32>
     {
         let file = File::open(filename).unwrap();
-        let mut reader:BufReader<File> = std::io::BufReader::new(file);
+        let reader:BufReader<File> = std::io::BufReader::new(file);
         let deserialized_data:NDArray_Serializable = serde_json::from_reader(reader).unwrap();
         return deserialized_data.to_array2();
     }
@@ -164,60 +232,120 @@ fn oneD_SVD(A: &Array2<f32>, epsilon:f32) -> Array2<f32>
     return v;
 }
 
-fn exclude_span_of_vector(A:&mut Array2<f32>, u:&Array2<f32>, v:&Array2<f32>)
+fn exclude_span_of_vector(A:&mut Array2<f32>, svd_entry:&SVD_Entry)
 {
-    let size = A.len_of(Axis(0));
+    let sigma = &svd_entry.singular_value;
+    let u = &svd_entry.u;
+    let v = &svd_entry.v;
+
+    let size = A.len_of(Axis(1));
     for i in 0..size
     {
         for j in 0..size
         {
-            A[(i, j)] -= u[(i, 0)] * v[(j, 0)];
+            A[(i, j)] -= sigma * u[(i, 0)] * v[(j, 0)];
+        }
+    }
+}
+
+fn generate_word_counts(A: &mut Array2<f32>, words:&Vec<String>, stories:&Vec<Story>)
+{
+    for (current_col, story) in stories.iter().enumerate(){
+        for story_word in &story.words{
+            for (current_row, word) in words.iter().enumerate(){
+                if story_word == word {
+                    A[(current_row, current_col)] += 1.0;
+                    break;
+                }
+            }
         }
     }
 }
 
 fn main() {
-    //basically safe to leave this unless we get a different database of stories
-    let SHOULD_IMPORT = true;
+    let STORY_FILENAME = "all_stories.json";
+    let WORDS_FILENAME= "one-grams.txt";
+    let MATRIX_DATA_FILENAME = "matrix_data.json";
+    let MATRIX_INFO_FILENAME = "matrix_info.json";
 
     //read stories from json
-    let mut story_file = File::open("all_stories.json").unwrap();
+    let mut story_file = File::open(STORY_FILENAME).unwrap();
     let mut story_file_contents = String::new();
     story_file.read_to_string(&mut story_file_contents).unwrap();
     let stories: Vec<Story> = serde_json::from_str(&story_file_contents).unwrap();
     
     //read words from txt
-    let mut words_file: File = File::open("one-grams.txt").unwrap();
+    let mut words_file: File = File::open(WORDS_FILENAME).unwrap();
     let mut words_file_contents: String = String::new();
     words_file.read_to_string(&mut words_file_contents).unwrap();
-    let most_common_words: Vec<String> = words_file_contents.lines()
+    let words: Vec<String> = words_file_contents.lines()
         .map(|word| word.to_string()).collect();
 
     //word_counts has a row for each word, and a column for each story
     //each entry represents the number of times that column's word appears in that row's story
     //doing the counting every time takes a while and makes debugging boring
     //so as long as all_stories.json hasn't been changed, we can just read in the data
-    let mut word_counts:Array2<f32>;
-    if SHOULD_IMPORT {
-        word_counts = NDArray_Serializable::read_from_file("word_counts.json");
-    }
-    else{
-        word_counts = Array2::<f32>::zeros((most_common_words.len(), stories.len()));
-        for (current_col, story) in stories.iter().enumerate(){
-            for story_word in &story.words{
-                for (current_row, word) in most_common_words.iter().enumerate(){
-                    if story_word == word {
-                        word_counts[(current_row, current_col)] += 1.0;
-                        break;
-                    }
-                }
-            }
-        }
+    let m = words.len();
+    let n = stories.len();
+    let mut word_counts = Array2::<f32>::zeros((m, n));
 
-        //write word_counts.json so we don't have to do that ugly nested loop again
-        let serializable_data = NDArray_Serializable::from_array2(&word_counts);
-        serializable_data.write_to_file("word_counts.json");
+    let matrix_info_exists = Path::new(MATRIX_INFO_FILENAME).exists();
+    let matrix_data_exists = Path::new(MATRIX_DATA_FILENAME).exists();
+    let mut matrix_info = Word_Count_Metadata{hash: 0, rows: 0, cols: 0};
+    
+    //stays true if files didn't exist previously OR hash didn't match
+    let mut calculate_word_counts = true;
+    //stays true if files didn't exist previously
+    //checking the hash calculates it
+    let mut calculate_hash = true;
+
+    println!("checking on files...");
+    //both files exist, but we don't know yet if the hash matches
+    if matrix_info_exists && matrix_data_exists
+    {
+        println!("matrix files present, checking hash...");
+        matrix_info = Word_Count_Metadata::read_from_file(MATRIX_INFO_FILENAME);
+
+        let hash_check = matrix_info.matches_file(STORY_FILENAME);
+
+        if hash_check.is_ok()
+        {
+            println!("hash matches! using {0} unchanged", MATRIX_DATA_FILENAME);
+            word_counts = NDArray_Serializable::read_from_file(MATRIX_DATA_FILENAME);
+
+            calculate_hash = false;
+            calculate_word_counts = false;
+        }
+        else 
+        {
+            println!("hash doesn't match :(");
+            //need to recalculate matrix_data.json, but hang onto this hash
+            //instead of figuring it out twice
+            let hash_value = hash_check.unwrap_err();
+            matrix_info.hash = hash_value;
+
+            calculate_hash = false;
+            calculate_word_counts = true;
+        }
     }
+
+    if calculate_hash
+    {
+        matrix_info = Word_Count_Metadata::from_file(STORY_FILENAME);
+    }
+
+    if calculate_word_counts
+    {
+        generate_word_counts(&mut word_counts, &words, &stories);
+
+        matrix_info.rows = words.len();
+        matrix_info.cols = stories.len();
+    
+        matrix_info.write_to_file(MATRIX_INFO_FILENAME);
+    
+        let matrix_data = NDArray_Serializable::from_array2(&word_counts);
+        matrix_data.write_to_file(MATRIX_DATA_FILENAME);  
+    }     
 
 
     //using power method for finding largest eigenvector / eigenvalue
@@ -234,7 +362,7 @@ fn main() {
         
         //exclude span of already found vectors
         for svd_entry in &svd_so_far{
-            exclude_span_of_vector(&mut A, &svd_entry.u, &svd_entry.v);
+            exclude_span_of_vector(&mut A, &svd_entry);
         }
 
         //find next singular vector
